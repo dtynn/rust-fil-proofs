@@ -183,11 +183,13 @@ mod tests {
     #[test]
     fn test_simple_short() {
         // Source is shorter than 1 padding cycle.
-        let source = vec![3u8; 30];
-        let mut reader = PadReader::new(io::Cursor::new(&source));
-        let mut target = Vec::new();
-        reader.read_to_end(&mut target).unwrap();
-        assert_eq!(&source[..], &target[..]);
+        let data = vec![3u8; 30];
+        let mut reader = PadReader::new(io::Cursor::new(&data));
+        let mut padded = Vec::new();
+        reader.read_to_end(&mut padded).unwrap();
+        assert_eq!(&data[..], &padded[..]);
+
+        assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
     }
 
     #[test]
@@ -206,8 +208,8 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_long() {
-        let data = vec![255u8; 151];
+    fn test_simple_127() {
+        let data = vec![255u8; 127];
         let mut padded = Vec::new();
         let mut reader = PadReader::new(io::Cursor::new(&data));
         reader.read_to_end(&mut padded).unwrap();
@@ -215,8 +217,8 @@ mod tests {
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
         assert_eq!(padded[32], 0b1111_1111);
-        assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
-        assert_eq!(padded[63], 0b0011_1111);
+
+        assert_eq!(padded.len(), 128);
 
         assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
     }
@@ -235,22 +237,30 @@ mod tests {
             buf_x
         };
 
-        // read 127 bytes from a 32-byte buffer and then a 95-byte buffer
-        let output_y = {
-            let input_y =
-                io::Cursor::new(random_bytes.iter().take(32).cloned().collect::<Vec<u8>>()).chain(
-                    io::Cursor::new(random_bytes.iter().skip(32).cloned().collect::<Vec<u8>>()),
-                );
+        for n in 1..127 {
+            let random_bytes = random_bytes.clone();
 
-            let mut reader = PadReader::new(input_y);
-            let mut buf_y = Vec::new();
-            reader.read_to_end(&mut buf_y).expect("could not seek");
+            // read 127 bytes from a n-byte buffer and then the rest
+            let output_y = {
+                let input_y =
+                    io::Cursor::new(random_bytes.iter().take(n).cloned().collect::<Vec<u8>>())
+                        .chain(io::Cursor::new(
+                            random_bytes.iter().skip(n).cloned().collect::<Vec<u8>>(),
+                        ));
 
-            buf_y
-        };
+                let mut reader = PadReader::new(input_y);
+                let mut buf_y = Vec::new();
+                reader.read_to_end(&mut buf_y).expect("could not seek");
 
-        assert_eq!(output_x, output_y, "should have written same bytes");
-        assert_eq!(output_x.into_boxed_slice(), bit_vec_padding(random_bytes));
+                buf_y
+            };
+
+            assert_eq!(&output_x, &output_y, "should have written same bytes");
+            assert_eq!(
+                output_x.clone().into_boxed_slice(),
+                bit_vec_padding(random_bytes)
+            );
+        }
     }
 
     #[test]
