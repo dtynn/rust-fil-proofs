@@ -433,6 +433,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::fs::File;
+    use std::io::prelude::*;
+
     use ff::Field;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
@@ -482,18 +486,22 @@ mod tests {
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
+            let replica_path = temp_path.join(format!("replica-path-{}", i));
+            let mut f = File::create(&replica_path).unwrap();
+            f.write_all(&data).unwrap();
+
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
             let mut tree: QuadMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
-                .compact(cur_config.clone(), StoreConfigDataVersion::One as u32)
+                .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
                 .unwrap();
             assert_eq!(c, true);
 
             let lctree: QuadLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(Some(cur_config), data.as_slice())
+                .lcmerkle_tree(cur_config.clone(), &replica_path)
                 .unwrap();
             trees.insert(i.into(), lctree);
         }

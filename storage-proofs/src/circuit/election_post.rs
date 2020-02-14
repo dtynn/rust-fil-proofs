@@ -368,6 +368,9 @@ mod tests {
     }
 
     fn test_election_post_circuit<H: Hasher>(expected_constraints: usize) {
+        use std::fs::File;
+        use std::io::prelude::*;
+
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -402,18 +405,22 @@ mod tests {
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
+            let replica_path = temp_path.join(format!("replica-path-{}", i));
+            let mut f = File::create(&replica_path).unwrap();
+            f.write_all(&data).unwrap();
+
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
             let mut tree: QuadMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
-                .compact(cur_config.clone(), StoreConfigDataVersion::One as u32)
+                .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
                 .unwrap();
             assert_eq!(c, true);
 
             let lctree: QuadLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(Some(cur_config), data.as_slice())
+                .lcmerkle_tree(cur_config.clone(), &replica_path)
                 .unwrap();
             trees.insert(i.into(), lctree);
         }
@@ -534,6 +541,9 @@ mod tests {
     }
 
     fn election_post_test_compound<H: Hasher>() {
+        use std::fs::File;
+        use std::io::prelude::*;
+
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -571,18 +581,22 @@ mod tests {
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
+            let replica_path = temp_path.join(format!("replica-path-{}", i));
+            let mut f = File::create(&replica_path).unwrap();
+            f.write_all(&data).unwrap();
+
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
             let mut tree: QuadMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
-                .compact(cur_config.clone(), StoreConfigDataVersion::One as u32)
+                .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
                 .unwrap();
             assert_eq!(c, true);
 
             let lctree: QuadLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(Some(cur_config), data.as_slice())
+                .lcmerkle_tree(cur_config.clone(), &replica_path)
                 .unwrap();
             trees.insert(i.into(), lctree);
         }
