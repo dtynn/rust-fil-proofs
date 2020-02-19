@@ -1,6 +1,5 @@
 #![allow(clippy::len_without_is_empty)]
 
-use std::fs::OpenOptions;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
@@ -13,7 +12,6 @@ use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len, FromIndexed
 use merkletree::proof;
 use merkletree::store::{LevelCacheStore, StoreConfig};
 use paired::bls12_381::Fr;
-use positioned_io::ReadAt;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -297,31 +295,13 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
 ) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
     trace!("create_lcmerkle_tree called with size {}", size);
 
-    // Open the replica for base layer data reads.
-    let reader = OpenOptions::new()
-        .read(true)
-        .open(replica_path)
-        .expect("Failed to open replica (base layer data)");
-
-    // Configure an external reader for access to the base layer data.
-    let external_reader = ExternalReader {
-        source: reader,
-        read_fn: |start, end, buf: &mut [u8], reader: &std::fs::File| {
-            reader
-                .read_exact_at(start as u64, &mut buf[0..end - start])
-                .expect("Failed to read");
-
-            Ok(end - start)
-        },
-    };
-
     // This method requires the entire tree length.
     let tree_size = get_merkle_tree_len(size, U::to_usize());
     let tree_store: LevelCacheStore<H::Domain, _> = LevelCacheStore::new_from_disk_with_reader(
         tree_size,
         U::to_usize(),
         &config,
-        external_reader,
+        ExternalReader::new_from_path(&replica_path)?,
     )?;
 
     ensure!(
